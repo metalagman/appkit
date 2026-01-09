@@ -24,7 +24,8 @@
       "run_shell_command",
       "web_fetch",
       "google_web_search",
-      "write_todos"
+      "write_todos",
+      "activate_skill"
     ]
   }
 }

@@ -51,6 +51,11 @@ func WithStopTimeout(timeout time.Duration) Option {
 	}
 }
 
+const (
+	defaultStartTimeout = 30 * time.Second
+	defaultStopTimeout  = 30 * time.Second
+)
+
 type adapter struct {
 	lifecycle    Lifecycle
 	startTimeout time.Duration
@@ -62,8 +67,8 @@ type adapter struct {
 func ToRunnable(l Lifecycle, opts ...Option) Runnable {
 	a := &adapter{
 		lifecycle:    l,
-		startTimeout: 30 * time.Second,
-		stopTimeout:  30 * time.Second,
+		startTimeout: defaultStartTimeout,
+		stopTimeout:  defaultStopTimeout,
 	}
 
 	for _, opt := range opts {

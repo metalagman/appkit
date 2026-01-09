@@ -1,31 +1,36 @@
-package lifecycle
+package lifecycle_test
 
 import (
 	"context"
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/metalagman/appkit/lifecycle"
 )
 
 func TestRunnableFunc(t *testing.T) {
 	called := false
 	errExpected := errors.New("expected error")
 
-	f := RunnableFunc(func(ctx context.Context) error {
+	f := lifecycle.RunnableFunc(func(ctx context.Context) error {
 		called = true
+
 		return errExpected
 	})
 
 	err := f.Run(context.Background())
+
 	if !called {
 		t.Error("RunnableFunc did not call the underlying function")
 	}
+
 	if err != errExpected {
 		t.Errorf("expected error %v, got %v", errExpected, err)
 	}
 }
 
-// mockLifecycle is a helper for testing ToRunnable
+// mockLifecycle is a helper for testing ToRunnable.
 type mockLifecycle struct {
 	startFunc func(ctx context.Context) error
 	stopFunc  func(ctx context.Context) error
@@ -35,28 +40,33 @@ type mockLifecycle struct {
 
 func (m *mockLifecycle) Start(ctx context.Context) error {
 	m.started = true
+
 	if m.startFunc != nil {
 		return m.startFunc(ctx)
 	}
+
 	return nil
 }
 
 func (m *mockLifecycle) Stop(ctx context.Context) error {
 	m.stopped = true
+
 	if m.stopFunc != nil {
 		return m.stopFunc(ctx)
 	}
+
 	return nil
 }
 
 func TestToRunnable_Success(t *testing.T) {
 	ml := &mockLifecycle{}
-	r := ToRunnable(ml)
+	r := lifecycle.ToRunnable(ml)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	// Run in a separate goroutine so we can cancel it
 	errCh := make(chan error)
+
 	go func() {
 		errCh <- r.Run(ctx)
 	}()
@@ -67,6 +77,7 @@ func TestToRunnable_Success(t *testing.T) {
 	if !ml.started {
 		t.Error("Start was not called")
 	}
+
 	if ml.stopped {
 		t.Error("Stop was called too early")
 	}
@@ -91,15 +102,17 @@ func TestToRunnable_StartError(t *testing.T) {
 			return expectedErr
 		},
 	}
-	r := ToRunnable(ml)
+	r := lifecycle.ToRunnable(ml)
 
 	err := r.Run(context.Background())
 	if err != expectedErr {
 		t.Errorf("expected error %v, got %v", expectedErr, err)
 	}
+
 	if !ml.started {
 		t.Error("Start was not called")
 	}
+
 	// Stop should NOT be called if Start failed
 	if ml.stopped {
 		t.Error("Stop was called after start failure")
@@ -113,18 +126,21 @@ func TestToRunnable_StopError(t *testing.T) {
 			return expectedErr
 		},
 	}
-	r := ToRunnable(ml)
+	r := lifecycle.ToRunnable(ml)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
 	err := r.Run(ctx)
+
 	if err != expectedErr {
 		t.Errorf("expected error %v, got %v", expectedErr, err)
 	}
+
 	if !ml.started {
 		t.Error("Start was not called")
 	}
+
 	if !ml.stopped {
 		t.Error("Stop was not called")
 	}
@@ -142,7 +158,7 @@ func TestToRunnable_StartTimeout(t *testing.T) {
 		},
 	}
 	// Set a short timeout
-	r := ToRunnable(ml, WithStartTimeout(10*time.Millisecond))
+	r := lifecycle.ToRunnable(ml, lifecycle.WithStartTimeout(10*time.Millisecond))
 
 	err := r.Run(context.Background())
 	if !errors.Is(err, context.DeadlineExceeded) {
@@ -162,7 +178,7 @@ func TestToRunnable_StopTimeout(t *testing.T) {
 		},
 	}
 	// Set a short timeout
-	r := ToRunnable(ml, WithStopTimeout(10*time.Millisecond))
+	r := lifecycle.ToRunnable(ml, lifecycle.WithStopTimeout(10*time.Millisecond))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
