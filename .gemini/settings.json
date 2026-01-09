@@ -1,4 +1,7 @@
 {
+  "model": {
+    "name": "gemini-3-flash-preview"
+  },
   "privacy": {
     "usageStatisticsEnabled": false
   },
