@@ -1,55 +1,81 @@
-# Versioning Strategy for Agents
+# Agent Integration Guide for AppKit
 
-This document describes how the `version` package is structured and how automated agents or CI/CD systems should interact with it to provide consistent versioning across the AppKit ecosystem.
+This document provides a comprehensive guide for AI agents, CI/CD systems, and automated tools on how to interact with, extend, and utilize the AppKit repository.
 
-## Design Philosophy
+## Table of Contents
 
-The `version` package follows the pattern established by the [Helm](https://github.com/helm/helm) project. It uses unexported variables that are injected at build time using Go's `-ldflags`. This approach ensures that the binary itself contains all necessary metadata without requiring external configuration files or environment variables at runtime.
+- [Versioning Strategy (version)](#versioning-strategy-version)
+- [Application Lifecycle (lifecycle)](#application-lifecycle-lifecycle)
+- [Logging Standards (logger)](#logging-standards-logger)
+- [Concurrent Job Execution (workerpool)](#concurrent-job-execution-workerpool)
 
-## Core Components
+---
 
-### 1. BuildInfo Struct
-The `BuildInfo` struct is the primary data container for versioning information. It is designed to be easily serialized to JSON for API or CLI consumption.
+## Versioning Strategy (version)
 
-```go
-type BuildInfo struct {
-	Version   string // The semver version
-	GitCommit string // The SHA1 of the commit
-	BuildDate string // RFC3339 formatted build timestamp
-	GoVersion string // Version of the Go compiler
-	Platform  string // OS/Arch information
-}
-```
+The `version` package is modeled after the Helm project, utilizing unexported variables injected at build time via `-ldflags`.
 
-### 2. ldflags Targets
+### ldflags Targets
 Agents should target the following internal variables within the `github.com/metalagman/appkit/version` package:
 
 | Variable | Description | Recommended Agent Action |
 | :--- | :--- | :--- |
-| `version` | The semver tag | Use `git describe --tags --always` |
-| `gitCommit` | The commit hash | Use `git rev-parse HEAD` |
-| `metadata` | Prerelease info | Append build numbers or branch names |
-| `buildDate` | Build timestamp | Use `date -u +%Y-%m-%dT%H:%M:%SZ` |
+| `version` | The semver tag | `git describe --tags --always` |
+| `gitCommit` | The commit hash | `git rev-parse HEAD` |
+| `metadata` | Prerelease info | Append build/branch info |
+| `buildDate` | Build timestamp | `date -u +%Y-%m-%dT%H:%M:%SZ` |
 
-## Automated Build Example
-
-When an agent is performing a release build, it should execute a command similar to the following:
-
+### Usage Example
 ```bash
-VERSION_PKG="github.com/metalagman/appkit/version"
-GIT_COMMIT=$(git rev-parse HEAD)
-VERSION=$(git describe --tags --always)
-BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-
-go build -ldflags "
-  -X ${VERSION_PKG}.version=${VERSION} \
-  -X ${VERSION_PKG}.gitCommit=${GIT_COMMIT} \
-  -X ${VERSION_PKG}.buildDate=${BUILD_DATE}"
--o my-app ./main.go
+go build -ldflags "-X github.com/metalagman/appkit/version.version=v1.0.0" -o my-app
 ```
 
-## Integration Patterns
+---
 
-- **CLI Tools:** Use `version.String()` to implement a `--version` flag.
-- **Web Services:** Use `version.Get()` to populate a `/version` or `/health` endpoint with JSON metadata.
-- **Loggers:** At application startup, log `version.String()` to provide context in log aggregators.
+## Application Lifecycle (lifecycle)
+
+The `lifecycle` package standardizes how components start and stop, ensuring graceful shutdowns.
+
+### Core Interfaces
+- **`Runnable`**: For blocking processes (e.g., servers). Implement `Run(ctx) error`.
+- **`Lifecycle`**: For components with non-blocking phases. Implement `Start(ctx)` and `Stop(ctx)`.
+
+### Agent Integration Patterns
+1. **Component Adaptation**: Use `lifecycle.ToRunnable(myLifecycle)` to convert non-blocking components into managed processes.
+2. **Orchestration**: Use `errgroup.Group` to manage multiple `Runnable` instances. When one fails, the context is canceled, triggering a cascade of graceful shutdowns.
+3. **Timeouts**: Always use `WithStartTimeout` and `WithStopTimeout` when creating runnables to prevent hung processes during CI/CD health checks.
+
+---
+
+## Logging Standards (logger)
+
+AppKit provides a pluggable logging interface to ensure consistent output across all components.
+
+### Implementation Choices
+- `logger.NewZerolog(zlog)`: Recommended for production (structured JSON).
+- `logger.NewSlog(slog)`: Recommended for standard Go 1.21+ compatibility.
+- `logger.NewNop()`: Use in unit tests to reduce noise.
+
+### Context Integration
+Agents should favor passing loggers through `context.Context` using `logger.ToContext(ctx, l)` and retrieving them via `logger.FromContext(ctx)`. This allows for request-scoped logging and tracing.
+
+---
+
+## Concurrent Job Execution (workerpool)
+
+The `workerpool` package manages background task execution and is fully integrated with the `lifecycle` pattern.
+
+### Key Features for Agents
+- **Lifecycle Integration**: The `Pool` implements `Start` and `Stop` methods. It can be managed directly by the `lifecycle` package.
+- **Context Merging**: Jobs submitted to the pool are automatically canceled if either the job-specific context expires or the pool itself is stopped.
+- **Middleware**: Always wrap jobs with provided middleware:
+    - `AddPanicRecovery`: Prevents a single job failure from crashing the entire worker.
+    - `AddLogger`: Automatically attaches job IDs and durations to logs.
+
+### Submission Pattern
+```go
+pool.Submit(ctx, func(ctx context.Context) error {
+    // Perform task
+    return nil
+})
+```
