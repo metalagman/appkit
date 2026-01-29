@@ -30,17 +30,18 @@ The [`workerpool`](./workerpool) package provides a service for running small pa
 
 ### Logger
 
-
-
 The [`logger`](./logger) package defines a common logging interface and provides implementations for various logging libraries.
-
-
 
 - **Interface:** A standard `Logger` interface for consistent logging across the application.
 
-
-
 - **Implementations:** Includes `zerolog`, `slog`, and `Nop` logger implementations.
+
+### Version
+
+The [`version`](./version) package provides a way to manage and retrieve application version information, which can be configured at build time using `ldflags`.
+
+- **Build Info:** Access structured build information including version, git commit, and build date.
+- **ldflags:** Support for setting version metadata during the `go build` process.
 
 
 
